@@ -1,7 +1,7 @@
 {
   "name": "watch",
   "version": "0.3.2",
-  "description": "Give an agent video evidence: timestamped frames and native captions, with optional local WhisperX or Groq/OpenAI transcription.",
+  "description": "Give an agent video evidence: timestamped frames and native captions, with optional local transcribe.cpp transcription or a Gemini engine.",
   "author": {
     "name": "Bradley Bonanno"
   },
@@ -15,18 +15,18 @@
     "vimeo",
     "tiktok",
     "transcription",
-    "whisper",
     "yt-dlp",
     "ffmpeg",
     "multimodal",
     "frames",
-    "whisperx"
+    "transcribe.cpp",
+    "gemini"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "watch",
     "shortDescription": "Give your agent a video input \u2014 paste a URL or local path and ask about it.",
-    "longDescription": "watch gives an agent timestamped video frames and a transcript from native captions or an optional local WhisperX / cloud Whisper fallback. The agent views the selected frames and answers from the available visual and spoken evidence.",
+    "longDescription": "watch gives an agent timestamped video frames and a transcript from native captions or an optional local transcribe.cpp fallback. The agent views the selected frames and answers from the available visual and spoken evidence.",
     "developerName": "Bradley Bonanno",
     "category": "Productivity",
     "capabilities": [

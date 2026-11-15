@@ -19,6 +19,7 @@ import tarfile
 import tempfile
 import urllib.request
 import zipfile
+from typing import NamedTuple
 from pathlib import Path
 
 VERSION = '0.4.2'
@@ -42,6 +43,12 @@ HOME = Path.home() / '.cache' / 'watch' / 'transcribe-cpp'
 SAMPLE_RATE = 16000
 # Merge pauses under 0.5 s; force-split speech past 20 s so timestamps stay fine-grained.
 VAD_OPTIONS = {'min_silence_ms': 500, 'speech_pad_ms': 200, 'max_speech_ms': 20000}
+
+
+class Transcript(NamedTuple):
+    segments: list[dict]
+    language: str
+    model: str
 
 
 def site_dir() -> Path:
@@ -87,7 +94,7 @@ def find_model(spec: tuple[str, str, str], configured: str = '') -> Path | None:
 
 def settings(cfg=None) -> dict:
     from config import ConfigError, get_config, positive_number
-    cfg = dict(get_config(backend_override='transcribe-cpp') if cfg is None else cfg)
+    cfg = dict(get_config(asr_override='transcribe-cpp') if cfg is None else cfg)
     if cfg['transcribe_cpp_language'] and not re.fullmatch('[a-z]{2,3}', cfg['transcribe_cpp_language']):
         raise ConfigError('WATCH_TRANSCRIBE_CPP_LANGUAGE must be a lowercase language code such as en or zh.')
     cfg['transcribe_cpp_timeout'] = (positive_number(cfg['transcribe_cpp_timeout'], 'WATCH_TRANSCRIBE_CPP_TIMEOUT')
@@ -175,15 +182,15 @@ def worker_command(pcm: Path, output: Path, model: Path, vad: Path, language: st
     return cmd + (['--language', language] if language else [])
 
 
-def transcribe_media(media: Path, work: Path, cfg=None, *, require_ready=True):
+def transcribe_media(media: Path, work: Path, cfg=None, *, require_ready=True) -> Transcript:
     from transcribe import normalize_segments
     cfg = settings(cfg)
     if require_ready and not runtime_ready():
-        raise SystemExit('transcribe.cpp runtime missing. Run setup.py --install-transcribe-cpp.')
+        raise SystemExit('transcribe.cpp runtime missing. Run setup.py --asr transcribe-cpp.')
     model = find_model(MODEL, cfg['transcribe_cpp_model'])
     vad = find_model(VAD, cfg['transcribe_cpp_vad'])
     if model is None or vad is None:
-        raise SystemExit('transcribe.cpp model or VAD file missing. Run setup.py --install-transcribe-cpp.')
+        raise SystemExit('transcribe.cpp model or VAD file missing. Run setup.py --asr transcribe-cpp.')
     print(f'[watch] local transcribe.cpp ({model.name}) transcription...', file=sys.stderr, flush=True)
     work.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='watch-tcpp-', dir=work) as temporary:
@@ -199,17 +206,15 @@ def transcribe_media(media: Path, work: Path, cfg=None, *, require_ready=True):
             raise SystemExit(f'Cannot start the transcribe.cpp worker ({type(exc).__name__}).') from None
         if result.returncode != 0:
             raise SystemExit(f'transcribe.cpp failed (exit {result.returncode}); see the error above. '
-                             'Rerun setup.py --install-transcribe-cpp if the runtime is broken.')
+                             'Rerun setup.py --asr transcribe-cpp if the runtime is broken.')
         try:
             data = json.loads(output.read_text(encoding='utf-8'))
             segments = normalize_segments(data)
         except (OSError, ValueError, TypeError) as exc:
             raise SystemExit(f'transcribe.cpp output missing or malformed ({type(exc).__name__}).') from None
-    segments.language = data.get('language') or 'unknown'
-    segments.model = model.name
-    if segments.no_speech:
+    if not segments:
         print('[watch] transcribe.cpp detected no speech.', file=sys.stderr)
-    return segments
+    return Transcript(segments, data.get('language') or 'unknown', model.name)
 
 
 def worker(argv: list[str]) -> int:

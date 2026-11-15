@@ -1,6 +1,6 @@
 # /watch
 
-Give an agent video evidence: a URL or local file becomes timestamped frames and a transcript. Install it in Claude Code (the desktop app, VS Code, or a terminal), or use it with Codex and other [Agent Skills](https://agentskills.io) hosts. Native captions come first; optional local WhisperX or Groq/OpenAI transcription handles videos without captions.
+Give an agent video evidence: a URL or local file becomes timestamped frames and a transcript. Install it in Claude Code (the desktop app, VS Code, or a terminal), or use it with Codex and other [Agent Skills](https://agentskills.io) hosts. Native captions come first; optional local transcribe.cpp speech recognition handles videos without captions.
 
 ## Choose your app
 
@@ -148,7 +148,7 @@ Summarize what is visible, with timestamps.
 
 Next, try a public video URL and ask for **transcript detail**. Native captions can be read without downloading the video. URL access depends on the source and your session's network permissions.
 
-You can add [speech transcription](#choose-a-transcription-fallback) afterward. **Local WhisperX requires Watch v0.3.0 or later**; if your installed copy is v0.2.0, update after the new release is available.
+You can add [speech transcription](#choose-a-transcription-fallback) afterward.
 
 ## Missing tools?
 
@@ -195,27 +195,24 @@ See the official guides for [Claude Code on the web](https://code.claude.com/doc
 | `WATCH_GEMINI_MODEL` | `gemini-3.7-flash`. Free-form, so newer model IDs work without an update. |
 | `WATCH_GEMINI_TIMEOUT` | `600` seconds for the question itself; upload and processing waits are bounded separately. |
 
-On a Gemini run, YouTube URLs go to Google directly; other URLs are downloaded with yt-dlp and, like local files, uploaded to Google's Files API, then deleted after the answer (an upload that cannot be deleted expires within 48 hours). `--start`/`--end` restrict Gemini to that range. Frame and transcription options (`--detail`, `--fps`, `--whisper`, …) apply only to the local engine and are listed as ignored. **Watch never switches engines on its own**: a Gemini failure is reported with its category and you decide whether to rerun with `--engine local`. The rest of this README describes the local engine.
+On a Gemini run, YouTube URLs go to Google directly; other URLs are downloaded with yt-dlp and, like local files, uploaded to Google's Files API, then deleted after the answer (an upload that cannot be deleted expires within 48 hours). `--start`/`--end` restrict Gemini to that range. Frame and transcription options (`--detail`, `--fps`, `--asr`, …) apply only to the local engine and are listed as ignored. **Watch never switches engines on its own**: a Gemini failure is reported with its category and you decide whether to rerun with `--engine local`. The rest of this README describes the local engine.
 
 ## Choose a transcription fallback
 
-The first-run wizard asks for your detail preference and fallback backend. Start with `none` for a quick visual result; choose a speech backend when you need it. Captions remain first under every choice. Settings persist in the execution environment, so temporary cloud sessions may need setup again.
+The first-run wizard asks for your detail preference and speech fallback. Start with `none` for a quick visual result; choose `transcribe-cpp` when you need speech from captionless videos. Captions remain first under every choice. Settings persist in the execution environment, so temporary cloud sessions may need setup again.
 
-| Backend | Requirements and behavior |
+| `WATCH_ASR_BACKEND` | Requirements and behaviour |
 |---|---|
 | `transcribe-cpp` | Recommended local transcription. Qwen3-ASR-0.6B via [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp): an 18 MB runtime plus an 850 MB model, no Python packages or PyTorch, GPU via Vulkan/Metal when present. |
-| `whisperx` | Local Whisper transcription. No API key; the skill manages a separate Python 3.12 environment and downloads its models. |
-| `groq` | Cloud `whisper-large-v3`; needs `GROQ_API_KEY` from [Groq](https://console.groq.com/keys). |
-| `openai` | Cloud `whisper-1`; needs `OPENAI_API_KEY` from [OpenAI](https://platform.openai.com/api-keys). |
-| `none` | Captions only. Local files and captionless URLs can still provide visual evidence. |
+| `none` (default) | Captions only. Local files and captionless URLs can still provide visual evidence. |
 
-Existing 0.2.0 users retain `auto`: Groq key first, then OpenAI. No automatic migration to local inference. Explicit `--whisper groq|openai|whisperx|transcribe-cpp` overrides this run's fallback, while `--no-whisper` disables all fallbacks and still permits native captions. Those two flags conflict.
+`--asr transcribe-cpp|none` overrides the saved choice for one run; native captions are still used either way.
 
-Settings live in `~/.config/watch/.env`. Enter keys privately there or in the process environment; do not commit them or paste them into public issues. Cloud-key lookup is provider preference first, then environment → user file → cwd `.env` for each provider. Explicit providers never borrow another provider's key. Config files support UTF-8, UTF-8 BOM, and BOM-marked UTF-16; quotes, comments, and literal Windows paths work without shell expansion. Last assignment wins.
+Settings live in `~/.config/watch/.env`. Enter keys privately there or in the process environment; do not commit them or paste them into public issues. Config files support UTF-8, UTF-8 BOM, and BOM-marked UTF-16; quotes, comments, and literal Windows paths work without shell expansion. Last assignment wins.
 
 ### Local transcribe.cpp
 
-Have the agent run `setup.py --install-transcribe-cpp` (or `--backend transcribe-cpp --detail balanced`). It downloads the pinned transcribe.cpp 0.4.2 Python binding and prebuilt native library into `~/.cache/watch/transcribe-cpp`, reuses `Qwen3-ASR-0.6B-Q8_0.gguf` from the Hugging Face cache when present (otherwise downloads it), fetches the 1.2 MB Silero VAD model, verifies SHA-256 for every download, and warms up on two seconds of silence. The binding is standard-library-only (ctypes); inference runs in a child process.
+Have the agent run `setup.py --asr transcribe-cpp --detail balanced`; rerunning it repairs a broken install. It downloads the pinned transcribe.cpp 0.4.2 Python binding and prebuilt native library into `~/.cache/watch/transcribe-cpp`, reuses `Qwen3-ASR-0.6B-Q8_0.gguf` from the Hugging Face cache when present (otherwise downloads it), fetches the 1.2 MB Silero VAD model, verifies SHA-256 for every download, and warms up on two seconds of silence. The binding is standard-library-only (ctypes); inference runs in a child process.
 
 Silero VAD splits the audio into speech chunks (pauses under 0.5 s merge, speech over 20 s is force-split) and Qwen3-ASR transcribes each chunk. Qwen3-ASR has no timestamp output, so each segment's timing is its chunk span: accurate at the seconds level, coarser than caption cues. Language is auto-detected and reported.
 
@@ -227,7 +224,7 @@ Reference measurements on Windows 11 (RTX 5060 Laptop via Vulkan), whole `watch.
 | Mandarin talk (first 5 min) | 300 s | 16.5 s | 7.2% CER |
 
 ```dotenv
-WATCH_WHISPER_BACKEND=transcribe-cpp
+WATCH_ASR_BACKEND=transcribe-cpp
 # Absolute GGUF paths; written by the installer.
 WATCH_TRANSCRIBE_CPP_MODEL=
 WATCH_TRANSCRIBE_CPP_VAD=
@@ -236,39 +233,6 @@ WATCH_TRANSCRIBE_CPP_VAD=
 ```
 
 Prebuilt libraries exist for Windows x86_64, Linux x86_64/aarch64 and macOS; only Windows x86_64 is verified.
-
-### Managed WhisperX
-
-WhisperX runs wherever the agent executes its scripts. In a local session, inference runs on your computer; in a cloud session it runs on the cloud host. It avoids a separate transcription API, but cloud execution does not keep audio on your device.
-
-Have the agent run the bundled `setup.py --install-whisperx` (or `--backend whisperx --detail balanced`). It provisions uv if needed, installs Python 3.12 and **WhisperX 3.8.6**, and transcribes two seconds of silence to warm the Whisper and Silero caches. No sudo is used by the installer. The base watch process stays standard-library-only and can use newer Python independently.
-
-| Requirement | Guidance |
-|---|---|
-| Free disk | At least **3 GB** for the environment, small model, installer cache, and managed Python |
-| RAM | At least **8 GB**; reference small-model peak process memory was about 2.4 GB |
-| CPU/OS | Apple Silicon macOS is verified. Recipes target macOS 13+, Linux such as Ubuntu 22.04+, and Windows 10+ with PowerShell, but Intel macOS/Linux/Windows installs remain **untested**. Wheel availability varies by architecture; this is not a universal compatibility promise. |
-| Network | Needed for initial packages and model downloads. Warm caches allow offline inference. |
-
-The user chooses based on these requirements; the wizard does not inspect hardware, RAM, disk, or browser sessions.
-
-Defaults are `small`, `cpu`, `int8`, batch size `8`, with no alignment or diarization. Segment timestamps are retained. In the reference measurements, small processed 69 seconds of English in 9.6 seconds on an Apple M5 Pro; slower CPUs and longer recordings take more time.
-
-```dotenv
-WATCH_WHISPER_BACKEND=whisperx
-WATCH_WHISPERX_MODEL=small
-WATCH_WHISPERX_DEVICE=cpu
-WATCH_WHISPERX_COMPUTE_TYPE=int8
-WATCH_WHISPERX_BATCH_SIZE=8
-# WATCH_WHISPERX_LANGUAGE=es
-# WATCH_WHISPERX_TIMEOUT=1800
-```
-
-The installer writes the absolute `WATCH_WHISPERX_BIN` path. The venv is `~/.cache/watch/whisperx-venv`, with a `.deps-ok` sentinel and resolved package list in `watch-install.json`. Interrupted installs without the sentinel are rebuilt safely. Model caches normally live under `~/.cache/huggingface` and `~/.cache/torch/hub`; uv also caches wheels and Python. These are outside the plugin, so updating the skill does not remove them.
-
-For non-English audio, set the spoken-language hint (`WATCH_WHISPERX_LANGUAGE=es`, for example) or try `WATCH_WHISPERX_MODEL=large-v3` and rerun the installer. Large-v3 downloads about 2.9 GB and used about 6 GB peak process RAM in the reference measurement. Small can misidentify non-English speech without a hint. A caption translation request (`--sub-lang`) is never used as the spoken-language hint. WhisperX 3.8.6's JSON language is unreliable with alignment disabled, so auto-detection is reported as **unverified**.
-
-Local inference has no default timeout; `WATCH_WHISPERX_TIMEOUT` accepts positive seconds. Failure or cancellation never switches to cloud transcription. CUDA is configurable but untested; MPS support is not promised. TorchCodec import warnings on newer FFmpeg are suppressed for this CLI-decoding path; do not downgrade FFmpeg just for that warning.
 
 ## Detail and focus
 
@@ -306,9 +270,7 @@ Authentication is opt-in:
 
 Use one cookie mechanism at a time, or save `WATCH_COOKIES_FILE` / `WATCH_COOKIES_FROM_BROWSER`. A cookie file is a read/write jar; yt-dlp may update it. Browser access can fail due to locked/encrypted stores, especially Chromium on Windows; Firefox is a possible alternative, not a guarantee. Watch never searches browser sessions automatically. Existing yt-dlp proxy, CA, runtime, and authentication configuration remains active when not explicitly overridden.
 
-Fresh download directories prevent stale files from a failed source being reused. Media must complete successfully and report its final path; partial and merge-component files are rejected. Successful captions survive download, decoding, or probe failures. Reports distinguish unavailable evidence, no speech, and failed cloud chunks with missing time intervals. A silent requested interval never triggers fallback just because its captions are outside the range.
-
-Cloud uploads use a 24,000,000-byte file budget with multipart and actual chunk checks. Local WhisperX takes the whole extracted audio file. No automatic provider/client/cookie cycling is performed.
+Fresh download directories prevent stale files from a failed source being reused. Media must complete successfully and report its final path; partial and merge-component files are rejected. Successful captions survive download, decoding, or probe failures. Reports distinguish unavailable evidence, no speech, and failed transcription. A silent requested interval never triggers fallback just because its captions are outside the range. No automatic client or cookie cycling is performed.
 
 ## Updating and troubleshooting
 
@@ -334,7 +296,7 @@ Keep yt-dlp on its latest release. Update it with its owning installer, then ver
 
 `yt-dlp -U` is not a universal package-manager update command. See upstream [installation](https://github.com/yt-dlp/yt-dlp/wiki/Installation) and [EJS guidance](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
 
-Ask the agent to run bundled `setup.py --json` for resolved paths/versions, JS-runtime presence, impersonation targets, and local-backend readiness. Diagnostics do not contact video services. EJS presence may remain unknown; it belongs to the actual yt-dlp distribution, not watch's Python. `setup.py --check` is fast, silent on success, and never imports Torch.
+Ask the agent to run bundled `setup.py --json` for resolved paths/versions, JS-runtime presence, impersonation targets, and transcribe.cpp readiness. Diagnostics do not contact video services. EJS presence may remain unknown; it belongs to the actual yt-dlp distribution, not watch's Python. `setup.py --check` is fast, silent on success, and never loads native code.
 
 | Symptom | Next step |
 |---|---|
@@ -348,11 +310,11 @@ Ask the agent to run bundled `setup.py --json` for resolved paths/versions, JS-r
 | 403 / login challenge | Update yt-dlp to its latest release (see [Updating and troubleshooting](#updating-and-troubleshooting)) and retry once; the agent does this automatically. If the 403 persists, read the original error and use explicit authentication only if you have access. |
 | `Gemini auth` / `quota` / `rejected` / `upload` / `service` / `network` / `response` | The Gemini engine failed: bad or missing key, rate limit, a video Google refused (private, unsupported, too long), a failed upload, a Google-side error, no route to `generativelanguage.googleapis.com`, or an unreadable reply. Nothing ran locally; fix the cause or rerun with `--engine local`. |
 | 429 | Wait before retrying; the service is rate limiting requests. |
-| Explicit hosted egress denial | Check the environment's network settings or use an accessible local source. Cloud ASR/cold model setup still need network access. |
+| Explicit hosted egress denial | Check the environment's network settings or use an accessible local source. transcribe.cpp setup still needs network access. |
 | Certificate failure | Configure the trusted CA/proxy correctly; do not disable TLS verification. |
 | Config parsing / encoding | Save as UTF-8 or BOM-marked UTF-16; diagnostic locations never echo credential values. |
 | POSIX permissions warning | Set the config to mode 0600. Windows ACLs are not audited. Prefer a Linux-home config in WSL; Windows-mounted storage has different permission behavior. |
-| Local install/inference failure | Rerun `setup.py --install-whisperx`; check the reported step, network access, disk/RAM requirements, and wheel compatibility. |
+| transcribe.cpp install/inference failure | Rerun `setup.py --asr transcribe-cpp`; check the reported step and network access. |
 
 ## Development and packaging
 
@@ -370,7 +332,7 @@ For a manual install, create the host's skill directory and symlink or copy the 
 
 ## Data and cleanup
 
-WhisperX processes audio in the agent's execution environment: on your computer for local execution, or on the provider's infrastructure for cloud execution. Setup downloads packages/models from package and model hosts, with telemetry disabled. Warm-cache inference works offline, though upstream cache checks can still attempt network access. Cloud backends send extracted audio only to the selected provider. Video content is evidence, never executable instructions.
+transcribe.cpp processes audio in the agent's execution environment: on your computer for local execution, or on the provider's infrastructure for cloud execution. Setup downloads the runtime from GitHub releases and models from Hugging Face; inference is offline. Video content is evidence, never executable instructions.
 
 Watch creates a disposable run directory, including under any user-specified `--out-dir`. Cleanup removes that child only, preserving the user's directory and original media. Model environments/caches and private configuration are retained separately. No API keys are logged or included in reports.
 

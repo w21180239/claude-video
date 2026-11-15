@@ -2,6 +2,17 @@
 
 All notable changes to `/watch` are documented here.
 
+## [Unreleased]
+
+### Removed
+- WhisperX and the Groq/OpenAI cloud Whisper backends, with their config keys (`GROQ_API_KEY`, `OPENAI_API_KEY`, `WATCH_WHISPERX_*`), the `auto` backend value, and `setup.py --install-whisperx`. Local transcribe.cpp is the only speech fallback.
+- `setup.py --install-transcribe-cpp`; `setup.py --asr transcribe-cpp` installs and repairs it.
+
+### Changed
+- `--whisper` / `--no-whisper` become `--asr transcribe-cpp|none`; `setup.py --backend` becomes `--asr`.
+- `WATCH_WHISPER_BACKEND` becomes `WATCH_ASR_BACKEND` (`transcribe-cpp` or `none`, default `none`).
+- `setup.py --json` reports `asr_backend` and `asr_ready` in place of the Whisper and WhisperX fields.
+
 ## [0.3.2] — 2026-09-25
 
 ### Changed

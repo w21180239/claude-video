@@ -12,9 +12,10 @@ CONFIG_DIR = Path.home() / '.config' / 'watch'
 CONFIG_FILE = CONFIG_DIR / '.env'
 DEFAULT_DETAIL = 'balanced'
 DETAILS = {'transcript', 'efficient', 'balanced', 'token-burner'}
-BACKENDS = {'auto', 'groq', 'openai', 'whisperx', 'transcribe-cpp', 'none'}
+ASR_BACKENDS = {'transcribe-cpp', 'none'}
 ENGINES = {'auto', 'gemini', 'local'}
 DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash'
+KEY_RE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*')
 
 
 class ConfigError(ValueError):
@@ -44,13 +45,13 @@ def parse_env(text: str, path: Path) -> dict[str, str]:
         raw = line.strip()
         if not raw or raw.startswith('#') or '=' not in raw:
             continue
-        key, value = raw.split('=', 1)
-        key, value = key.strip(), value.strip()
-        if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', key):
+        key, value = (part.strip() for part in raw.split('=', 1))
+        if not KEY_RE.fullmatch(key):
             continue
         if value.startswith(('"', "'")):
             close = value.find(value[0], 1)
-            if close < 0 or (value[close + 1:].strip() and not value[close + 1:].strip().startswith('#')):
+            rest = value[close + 1:].strip()
+            if close < 0 or (rest and not rest.startswith('#')):
                 raise ConfigError(f'Malformed quoted value in {path}, line {number}; fix the quotes.')
             value = value[1:close]
         else:
@@ -69,13 +70,9 @@ def write_settings(values: dict[str, str], path: Path | None = None) -> None:
     path = CONFIG_FILE if path is None else path
     text = read_env_text(path)
     parse_env(text, path)  # Never overwrite unreadable or malformed configuration.
-    lines = []
-    for line in text.splitlines():
-        key = line.partition('=')[0].strip()
-        if key not in values:
-            lines.append(line)
+    lines = [line for line in text.splitlines() if line.partition('=')[0].strip() not in values]
     for key, value in values.items():
-        if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', key) or any(c in value for c in '\r\n'):
+        if not KEY_RE.fullmatch(key) or any(c in value for c in '\r\n'):
             raise ConfigError('Invalid configuration assignment.')
         quote = '"' if '"' not in value else "'"
         if quote in value:
@@ -93,22 +90,6 @@ def write_settings(values: dict[str, str], path: Path | None = None) -> None:
         Path(name).unlink(missing_ok=True)
 
 
-def load_api_key(preferred: str | None = None) -> tuple[str | None, str | None]:
-    candidates = [('groq', 'GROQ_API_KEY'), ('openai', 'OPENAI_API_KEY')]
-    for backend, name in candidates:
-        if preferred is not None and backend != preferred:
-            continue
-        value = os.environ.get(name, '').strip()
-        if not value:
-            for path in (CONFIG_FILE, Path.cwd() / '.env'):
-                value = read_env_file(path).get(name, '').strip()
-                if value:
-                    break
-        if value:
-            return backend, value
-    return None, None
-
-
 def load_gemini_key() -> str | None:
     """Environment, then the user config, then a project .env; never logged."""
     value = os.environ.get('GEMINI_API_KEY', '').strip()
@@ -121,42 +102,35 @@ def load_gemini_key() -> str | None:
 
 
 def resolve_engine(choice: str, has_key: bool) -> str:
-    if choice not in ENGINES:
-        raise ConfigError('WATCH_ENGINE must be auto, gemini, or local.')
     if choice == 'gemini' and not has_key:
         raise ConfigError('The gemini engine needs GEMINI_API_KEY in the environment or '
                           f'{CONFIG_FILE}. Add it, or rerun with --engine local.')
     return 'gemini' if choice == 'gemini' or (choice == 'auto' and has_key) else 'local'
 
 
-def get_config(*, backend_override: str | None = None) -> dict:
+def get_config(*, asr_override: str | None = None) -> dict:
+    """CLI override, then environment, then the user config, then defaults."""
     file_values = read_env_file()
+
     def setting(name, default=''):
         return os.environ.get(name, file_values.get(name, default)).strip()
+
     detail = setting('WATCH_DETAIL', DEFAULT_DETAIL)
-    backend = backend_override if backend_override is not None else setting('WATCH_WHISPER_BACKEND', 'auto')
-    if backend not in BACKENDS:
-        raise ConfigError('WATCH_WHISPER_BACKEND must be auto, groq, openai, whisperx, transcribe-cpp, or none.')
+    asr = asr_override if asr_override is not None else setting('WATCH_ASR_BACKEND', 'none')
+    if asr not in ASR_BACKENDS:
+        raise ConfigError('WATCH_ASR_BACKEND must be transcribe-cpp or none.')
     engine = setting('WATCH_ENGINE', 'auto')
     if engine not in ENGINES:
         raise ConfigError('WATCH_ENGINE must be auto, gemini, or local.')
     return {
         'detail': detail if detail in DETAILS else DEFAULT_DETAIL,
-        'config_file': str(CONFIG_FILE),
-        'whisper_backend': backend,
+        'asr_backend': asr,
         'engine': engine,
-        'gemini_model': setting('WATCH_GEMINI_MODEL', DEFAULT_GEMINI_MODEL) or DEFAULT_GEMINI_MODEL,
+        'gemini_model': setting('WATCH_GEMINI_MODEL') or DEFAULT_GEMINI_MODEL,
         'gemini_timeout': positive_number(setting('WATCH_GEMINI_TIMEOUT', '600'), 'WATCH_GEMINI_TIMEOUT'),
         'sub_lang': setting('WATCH_SUB_LANG', 'auto'),
         'cookies_file': setting('WATCH_COOKIES_FILE'),
         'cookies_from_browser': setting('WATCH_COOKIES_FROM_BROWSER'),
-        'whisperx_bin': setting('WATCH_WHISPERX_BIN'),
-        'whisperx_model': setting('WATCH_WHISPERX_MODEL', 'small'),
-        'whisperx_device': setting('WATCH_WHISPERX_DEVICE', 'cpu'),
-        'whisperx_compute_type': setting('WATCH_WHISPERX_COMPUTE_TYPE', 'int8'),
-        'whisperx_batch_size': setting('WATCH_WHISPERX_BATCH_SIZE', '8'),
-        'whisperx_language': setting('WATCH_WHISPERX_LANGUAGE'),
-        'whisperx_timeout': setting('WATCH_WHISPERX_TIMEOUT'),
         'transcribe_cpp_model': setting('WATCH_TRANSCRIBE_CPP_MODEL'),
         'transcribe_cpp_vad': setting('WATCH_TRANSCRIBE_CPP_VAD'),
         'transcribe_cpp_language': setting('WATCH_TRANSCRIBE_CPP_LANGUAGE'),

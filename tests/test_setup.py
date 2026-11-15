@@ -20,7 +20,7 @@ def test_json_reports_watch_detail(monkeypatch, capsys):
 
 
 def test_keyless_completed_setup_proceeds_silently(capsys):
-    config.write_settings({'SETUP_COMPLETE': 'true', 'WATCH_WHISPER_BACKEND': 'none'})
+    config.write_settings({'SETUP_COMPLETE': 'true', 'WATCH_ASR_BACKEND': 'none'})
     assert setup.cmd_check() == 0
     assert capsys.readouterr() == ('', '')
     assert setup._status()['status'] == 'ready'
@@ -33,29 +33,15 @@ def test_keyless_first_run_can_proceed(capsys):
     assert setup._status()['first_run']
 
 
-def test_key_present_is_ready(monkeypatch):
-    monkeypatch.setenv('GROQ_API_KEY', 'test-only')
-    assert setup._status()['whisper_backend'] == 'groq'
-    assert setup._status()['can_proceed']
-
-
-def test_missing_binaries_are_independent_of_keys(monkeypatch):
-    monkeypatch.setattr(setup, '_check_binaries', lambda: ['ffprobe'])
-    monkeypatch.setenv('GROQ_API_KEY', 'test-only')
-    assert setup.cmd_check() == 2
-    assert setup._status()['status'] == 'needs_install'
-
-
 def test_project_marker_cannot_complete_setup(monkeypatch):
-    Path('.env').write_text('SETUP_COMPLETE=true\nGROQ_API_KEY=test-project\n')
+    Path('.env').write_text('SETUP_COMPLETE=true\n')
     monkeypatch.setenv('SETUP_COMPLETE', 'true')
     assert setup.is_first_run()
-    assert setup._have_api_key() == (True, 'groq')
 
 
 def test_marker_replacement_preserves_comments_and_key():
     setup._scaffold_env()
-    config.CONFIG_FILE.write_text('# preserved\nGROQ_API_KEY="test#=key"\nSETUP_COMPLETE=false\nSETUP_COMPLETE=false\n')
+    config.CONFIG_FILE.write_text('# preserved\nGEMINI_API_KEY="test#=key"\nSETUP_COMPLETE=false\nSETUP_COMPLETE=false\n')
     setup._write_setup_complete()
     text = config.CONFIG_FILE.read_text()
     assert '# preserved' in text and 'test#=key' in text
@@ -94,8 +80,8 @@ def test_permission_diagnostics(monkeypatch, tmp_path, capsys, system, mode, war
     assert bool(capsys.readouterr().err) == warns
 
 
-def test_check_never_launches_whisperx(monkeypatch):
-    config.write_settings({'WATCH_WHISPER_BACKEND': 'whisperx'})
+def test_check_is_lightweight(monkeypatch):
+    config.write_settings({'WATCH_ASR_BACKEND': 'transcribe-cpp'})
     monkeypatch.setattr(setup, '_probe', lambda *a: pytest.fail('check must be lightweight'))
     assert setup.cmd_check() == 0
 
@@ -103,7 +89,7 @@ def test_check_never_launches_whisperx(monkeypatch):
 def test_none_backend_completion():
     assert setup.cmd_install('none', 'efficient') == 0
     assert not setup.is_first_run()
-    assert config.get_config()['whisper_backend'] == 'none'
+    assert config.get_config()['asr_backend'] == 'none'
     assert config.get_config()['detail'] == 'efficient'
 
 
@@ -139,9 +125,9 @@ def test_engine_gemini_without_key_writes_choice_and_asks_for_key(monkeypatch, c
 def test_engine_gemini_with_key_completes_setup_and_preserves_lines(monkeypatch):
     monkeypatch.setattr(setup, '_check_binaries', lambda: list(setup.REQUIRED_BINARIES))
     config.CONFIG_DIR.mkdir(parents=True)
-    config.CONFIG_FILE.write_text('# my notes\nGEMINI_API_KEY=unit-key\nGROQ_API_KEY=keep-me\n')
+    config.CONFIG_FILE.write_text('# my notes\nGEMINI_API_KEY=unit-key\nWATCH_SUB_LANG=keep-me\n')
     assert setup.cmd_install(engine='gemini') == 0
     text = config.CONFIG_FILE.read_text()
-    assert '# my notes' in text and 'GROQ_API_KEY=keep-me' in text
+    assert '# my notes' in text and 'WATCH_SUB_LANG=keep-me' in text
     values = config.read_env_file(config.CONFIG_FILE)
     assert values['WATCH_ENGINE'] == 'gemini' and values['SETUP_COMPLETE'] == 'true'

@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from frames import format_time
 from runtime import diagnostic
 
 API = 'https://generativelanguage.googleapis.com'
@@ -77,12 +78,6 @@ def _call(method: str, url: str, key: str, *, data=None, headers=None, timeout: 
         raise _fail('network', f'{type(exc).__name__}: {getattr(exc, "reason", exc)}', key) from None
 
 
-def _clock(seconds: int) -> str:
-    hours, rest = divmod(seconds, 3600)
-    minutes, secs = divmod(rest, 60)
-    return f'{hours}:{minutes:02d}:{secs:02d}' if hours else f'{minutes:02d}:{secs:02d}'
-
-
 def _processing(clip):
     if not clip or (clip[0] is None and clip[1] is None):
         return 'agentic', 'agentic'
@@ -92,8 +87,8 @@ def _processing(clip):
         config['start_offset'] = f'{int(math.floor(start))}s'
     if end is not None:
         config['end_offset'] = f'{int(math.ceil(end))}s'
-    label = (f'static clip {_clock(int(math.floor(start or 0)))}–'
-             f'{_clock(int(math.ceil(end))) if end is not None else "end"}')
+    label = (f'static clip {format_time(math.floor(start or 0))}–'
+             f'{format_time(math.ceil(end)) if end is not None else "end"}')
     return config, label
 
 

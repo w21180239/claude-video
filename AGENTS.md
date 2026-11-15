@@ -1,12 +1,12 @@
 # claude-video / watch skill
 
-Agent Skills package that gives an agent a video input. Installable across Claude Code (most common host), Codex, Cursor, GitHub Copilot, and 50+ other [Agent Skills](https://agentskills.io) hosts. Pure-stdlib Python that orchestrates `yt-dlp` + `ffmpeg` and an optional Whisper API or separately managed local WhisperX process.
+Agent Skills package that gives an agent a video input. Installable across Claude Code (most common host), Codex, Cursor, GitHub Copilot, and 50+ other [Agent Skills](https://agentskills.io) hosts. Pure-stdlib Python that orchestrates `yt-dlp` + `ffmpeg`, an optional local transcribe.cpp speech-recognition child process, and an optional Gemini engine.
 
 ## Structure
 
 - `skills/watch/SKILL.md` — canonical skill contract the model reads when `/watch` fires. Source of truth for behavior across every host.
 - `skills/watch/scripts/watch.py` — entry point; orchestrates download → frames → transcript.
-- `skills/watch/scripts/{download,frames,transcribe,whisper,local_whisperx,local_transcribe_cpp,setup,config,runtime}.py` — yt-dlp wrapper, ffmpeg frame extraction + auto-fps, caption/Whisper/local ASR transcription, preflight/installer, shared config.
+- `skills/watch/scripts/{download,frames,transcribe,local_transcribe_cpp,gemini,setup,config,runtime}.py` — yt-dlp wrapper, ffmpeg frame extraction + auto-fps, caption parsing, local transcribe.cpp ASR, Gemini engine, preflight/installer, shared config, process helpers.
 - `skills/watch/scripts/build-skill.sh` — builds `dist/watch.skill` for claude.ai upload (dev-only).
 - `hooks/` — Claude Code SessionStart setup-status hook (Claude Code only).
 - `.claude-plugin/` — `plugin.json` + `marketplace.json` (Claude Code plugin + local marketplace).

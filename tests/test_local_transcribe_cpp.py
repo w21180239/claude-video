@@ -9,7 +9,6 @@ import pytest
 import config
 import local_transcribe_cpp as tcpp
 import setup
-import whisper
 
 FAKE_BINDING = '''
 import os
@@ -101,23 +100,24 @@ def audio(tmp_path):
 
 
 def test_worker_maps_vad_spans_to_segments(runtime, audio, tmp_path, capfd):
-    segments = tcpp.transcribe_media(audio, tmp_path / 'work')
+    segments, language, model = tcpp.transcribe_media(audio, tmp_path / 'work')
     assert segments == [{'start': 0.0, 'end': 0.5, 'text': 'hello world'},
                         {'start': 1.0, 'end': 2.0, 'text': 'partial'}]
-    assert segments.language == 'en' and segments.model == tcpp.MODEL[1]
+    assert language == 'en' and model == tcpp.MODEL[1]
     err = capfd.readouterr().err
     assert '3/3 speech chunks' in err and 'chatter' not in err
 
 
 def test_configured_language_is_forwarded(runtime, audio, tmp_path, monkeypatch):
     monkeypatch.setenv('WATCH_TRANSCRIBE_CPP_LANGUAGE', 'zh')
-    assert tcpp.transcribe_media(audio, tmp_path / 'work')[0]['text'] == 'hello world'
+    assert tcpp.transcribe_media(audio, tmp_path / 'work').segments[0]['text'] == 'hello world'
 
 
-def test_silence_reports_no_speech(runtime, audio, tmp_path, monkeypatch):
+def test_silence_reports_no_speech(runtime, audio, tmp_path, monkeypatch, capfd):
     monkeypatch.setenv('WATCH_TEST_MODE', 'silence')
-    segments = tcpp.transcribe_media(audio, tmp_path / 'work')
-    assert segments == [] and segments.no_speech
+    transcript = tcpp.transcribe_media(audio, tmp_path / 'work')
+    assert transcript.segments == [] and transcript.language == 'unknown'
+    assert 'no speech' in capfd.readouterr().err
 
 
 def test_worker_crash_is_a_clean_failure(runtime, audio, tmp_path, monkeypatch):
@@ -140,7 +140,7 @@ def test_timeout_stops_worker(runtime, audio, tmp_path, monkeypatch):
 
 
 def test_missing_runtime_points_to_installer(audio, tmp_path):
-    with pytest.raises(SystemExit, match='--install-transcribe-cpp'):
+    with pytest.raises(SystemExit, match='--asr transcribe-cpp'):
         tcpp.transcribe_media(audio, tmp_path / 'work')
 
 
@@ -180,31 +180,23 @@ def test_invalid_language_rejected(monkeypatch):
         tcpp.settings()
 
 
-def test_whisper_dispatches_without_extracting_mp3(monkeypatch, tmp_path):
-    monkeypatch.setattr(whisper, 'extract_audio', lambda *a: pytest.fail('decodes PCM itself'))
-    monkeypatch.setattr(tcpp, 'transcribe_media', lambda media, work: ['ok'])
-    assert whisper.transcribe_video('v.mp4', tmp_path / 'audio.mp3', backend='transcribe-cpp') == (['ok'], 'transcribe-cpp')
-    with pytest.raises(SystemExit, match='API key'):
-        whisper.transcribe_video('v.mp4', tmp_path / 'audio.mp3', backend='transcribe-cpp', api_key='k')
-
-
 def test_status_reports_readiness_from_files_only(runtime):
-    config.write_settings({'WATCH_WHISPER_BACKEND': 'transcribe-cpp'})
+    config.write_settings({'WATCH_ASR_BACKEND': 'transcribe-cpp'})
     status = setup._status()
-    assert status['transcribe_cpp_ready'] and status['backend_ready']
+    assert status['transcribe_cpp_ready'] and status['asr_ready']
     assert 'transcribe_cpp' not in sys.modules
 
 
 def test_status_not_ready_without_runtime():
-    config.write_settings({'WATCH_WHISPER_BACKEND': 'transcribe-cpp'})
+    config.write_settings({'WATCH_ASR_BACKEND': 'transcribe-cpp'})
     status = setup._status()
-    assert not status['transcribe_cpp_ready'] and not status['backend_ready']
+    assert not status['transcribe_cpp_ready'] and not status['asr_ready']
 
 
 def test_installer_writes_settings_after_warmup(runtime, monkeypatch):
     monkeypatch.setattr(tcpp, 'install_runtime', lambda: pytest.fail('runtime already present'))
     assert setup.cmd_install('transcribe-cpp') == 0
     cfg = config.get_config()
-    assert cfg['whisper_backend'] == 'transcribe-cpp'
+    assert cfg['asr_backend'] == 'transcribe-cpp'
     assert cfg['transcribe_cpp_model'].endswith(tcpp.MODEL[1]) and cfg['transcribe_cpp_vad'].endswith(tcpp.VAD[1])
     assert not setup.is_first_run()

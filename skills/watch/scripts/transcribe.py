@@ -13,20 +13,14 @@ from runtime import configure_stdio
 TIME = r'(?:[0-9]{2,}:)?[0-5][0-9]:[0-5][0-9][.,][0-9]{3}'
 TIMING_RE = re.compile(rf'^\s*({TIME})\s+-->\s+({TIME})(?:\s+.*)?$')
 TAG_RE = re.compile(r'<[^>]*>')
+BLOCK_RE = re.compile(r'^(NOTE(?:\s|$)|STYLE$|REGION$)')
 
 
-class Segments(list):
-    """Internal metadata without changing the public segment dictionaries."""
-    def __init__(self, values=(), *, gaps=None, no_speech=False):
-        super().__init__(values)
-        self.gaps = list(gaps or [])
-        self.no_speech = no_speech
-
-
-def normalize_segments(data: object) -> Segments:
+def normalize_segments(data: object) -> list[dict]:
+    """Validate a {'segments': [{start, end, text}]} payload into chronological segments."""
     if not isinstance(data, dict) or not isinstance(data.get('segments'), list):
         raise ValueError('expected a JSON object with a segments array')
-    out = Segments()
+    out = []
     previous = -1.0
     for segment in data['segments']:
         if not isinstance(segment, dict):
@@ -41,7 +35,6 @@ def normalize_segments(data: object) -> Segments:
             raise ValueError('invalid segment timestamps or text')
         previous = start
         out.append({'start': round(start, 6), 'end': round(end, 6), 'text': text.strip()})
-    out.no_speech = not out
     return out
 
 
@@ -55,23 +48,20 @@ def parse_vtt(path: str) -> list[dict]:
     i = 0
     while i < len(lines):
         line = lines[i]
-        if re.match(r'^(NOTE(?:\s|$)|STYLE$|REGION$)', line):
+        if BLOCK_RE.match(line):
             i += 1
             while i < len(lines) and lines[i] != '':
                 i += 1
             continue
         match = TIMING_RE.match(line)
+        i += 1
         if not match:
-            i += 1
             continue
         start, end = map(_seconds, match.groups())
         display = line[match.end(2):].strip()
-        i += 1
         payload = []
-        while i < len(lines) and lines[i] != '':
-            # Recover a missing blank separator without losing the next cue.
-            if TIMING_RE.match(lines[i]):
-                break
+        # A timing line also ends the cue, recovering a missing blank separator.
+        while i < len(lines) and lines[i] != '' and not TIMING_RE.match(lines[i]):
             payload.append(lines[i])
             i += 1
         text = ' '.join(html.unescape(TAG_RE.sub('', part)).strip() for part in payload).strip()
@@ -84,7 +74,7 @@ def _dedupe(segments: list[dict]) -> list[dict]:
     """Collapse only overlapping same-display duplicates; preserve repeated speech."""
     out = []
     for seg in segments:
-        if out and seg['start'] < out[-1]['end'] and seg.get('_display') == out[-1].get('_display'):
+        if out and seg['start'] < out[-1]['end'] and seg['_display'] == out[-1]['_display']:
             previous = out[-1]
             if seg['text'] == previous['text'] or seg['text'].startswith(previous['text'] + ' '):
                 previous['text'] = seg['text']

@@ -1,7 +1,7 @@
 {
   "name": "watch",
   "version": "0.3.2",
-  "description": "Give an agent video evidence: timestamped frames and native captions, with optional local WhisperX or Groq/OpenAI transcription.",
+  "description": "Give an agent video evidence: timestamped frames and native captions, with optional local transcribe.cpp transcription or a Gemini engine.",
   "author": {
     "name": "Bradley Bonanno"
   },
@@ -15,11 +15,11 @@
     "vimeo",
     "tiktok",
     "transcription",
-    "whisper",
     "yt-dlp",
     "ffmpeg",
     "multimodal",
     "frames",
-    "whisperx"
+    "transcribe.cpp",
+    "gemini"
   ]
 }

@@ -21,9 +21,7 @@ def isolated_user(monkeypatch, tmp_path):
     home.mkdir()
     cwd.mkdir()
     for key in list(os.environ):
-        if key.startswith("WATCH_") or key in {
-            "GROQ_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "SETUP_COMPLETE", "XDG_CONFIG_HOME",
-        }:
+        if key.startswith("WATCH_") or key in {"GEMINI_API_KEY", "SETUP_COMPLETE", "XDG_CONFIG_HOME"}:
             monkeypatch.delenv(key)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
@@ -36,10 +34,6 @@ def isolated_user(monkeypatch, tmp_path):
         monkeypatch.setattr(sys.modules["setup"], "CONFIG_DIR", config.CONFIG_DIR)
         monkeypatch.setattr(sys.modules["setup"], "CONFIG_FILE", config.CONFIG_FILE)
         sys.modules["setup"]._PERM_WARNED.clear()
-    import whisper
-    def no_upload(*args, **kwargs):
-        raise AssertionError("Tests must mock cloud uploads")
-    monkeypatch.setattr(whisper, "urlopen", no_upload)
     import gemini
     def no_gemini(*args, **kwargs):
         raise AssertionError("Tests must mock Gemini calls")

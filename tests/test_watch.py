@@ -15,7 +15,7 @@ def _run(clip: Path, *args: str, env_extra: dict | None = None) -> str:
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
-        [sys.executable, str(WATCH), str(clip), "--no-whisper", *args],
+        [sys.executable, str(WATCH), str(clip), "--asr", "none", *args],
         capture_output=True, text=True, env=env,
     )
     assert proc.returncode == 0, proc.stderr
@@ -87,7 +87,6 @@ def test_no_dedup_preserves_static_frames(static_clip: Path):
 
 import pytest
 import watch
-from transcribe import Segments
 
 
 def _caption_context(monkeypatch, tmp_path, body):
@@ -103,7 +102,7 @@ def _caption_context(monkeypatch, tmp_path, body):
 def test_silent_focus_never_calls_asr(monkeypatch, tmp_path, capsys):
     _caption_context(monkeypatch, tmp_path, '00:00.000 --> 00:10.000\nhello\n')
     monkeypatch.setattr(watch, 'download', lambda *a, **kw: pytest.fail('caption-only focus must not download'))
-    monkeypatch.setattr(watch, 'transcribe_video', lambda *a, **kw: pytest.fail('a silent focus is not a missing track'))
+    monkeypatch.setattr(watch, 'transcribe_media', lambda *a, **kw: pytest.fail('a silent focus is not a missing track'))
     monkeypatch.setattr(sys, 'argv', ['watch', 'https://example.com/video', '--detail', 'transcript', '--start', '20', '--end', '30'])
     assert watch.main() == 0
     assert 'no speech in selected range' in capsys.readouterr().out
@@ -137,40 +136,37 @@ def _mock_audio(monkeypatch):
     monkeypatch.setattr(watch, 'get_metadata', lambda *a: {'duration_seconds': 30, 'has_audio': True, 'has_video': False})
 
 
-def test_partial_report_includes_missing_intervals(monkeypatch, capsys):
+def test_asr_transcript_is_labelled_and_range_filtered(monkeypatch, capsys):
+    from local_transcribe_cpp import Transcript
     _mock_audio(monkeypatch)
-    monkeypatch.setattr(watch, 'load_api_key', lambda *a: ('groq', 'dummy'))
-    monkeypatch.setattr(watch, 'transcribe_video', lambda *a, **kw: (Segments([{'start': 1, 'end': 2, 'text': 'good'}], gaps=[{'start': 10, 'end': 20}]), 'groq'))
-    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript'])
+    segments = [{'start': 1, 'end': 2, 'text': 'early'}, {'start': 12, 'end': 14, 'text': 'inside'}]
+    monkeypatch.setattr(watch, 'transcribe_media', lambda *a, **kw: Transcript(segments, 'en', 'model.gguf'))
+    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--asr', 'transcribe-cpp',
+                                      '--start', '10', '--end', '20'])
     assert watch.main() == 0
     out = capsys.readouterr().out
-    assert 'partial; missing intervals' in out and '00:10 → 00:20' in out
+    assert 'transcribe.cpp model.gguf, language en' in out and '1 segments in range' in out
+    assert '[00:12] inside' in out and 'early' not in out
 
 
-def test_no_whisper_disables_configured_local_backend(monkeypatch):
+@pytest.mark.parametrize('saved', ['transcribe-cpp', 'invalid-old-preference'])
+def test_asr_none_overrides_saved_backend(monkeypatch, capsys, saved):
     _mock_audio(monkeypatch)
-    monkeypatch.setenv('WATCH_WHISPER_BACKEND', 'whisperx')
-    monkeypatch.setattr(watch, 'transcribe_video', lambda *a, **kw: pytest.fail('fallback disabled'))
-    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--no-whisper'])
+    monkeypatch.setenv('WATCH_ASR_BACKEND', saved)
+    monkeypatch.setattr(watch, 'transcribe_media', lambda *a, **kw: pytest.fail('fallback disabled'))
+    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--asr', 'none'])
     assert watch.main() == 0
+    assert 'fallback disabled' in capsys.readouterr().out
 
 
-def test_local_failure_does_not_resolve_cloud(monkeypatch, capsys):
+def test_asr_failure_is_reported(monkeypatch, capsys):
     _mock_audio(monkeypatch)
-    monkeypatch.setattr(watch, 'load_api_key', lambda *a: pytest.fail('no cloud fallback'))
     def fail(*a, **kw):
-        assert kw['backend'] == 'whisperx'
         raise SystemExit('local model failed')
-    monkeypatch.setattr(watch, 'transcribe_video', fail)
-    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--whisper', 'whisperx'])
+    monkeypatch.setattr(watch, 'transcribe_media', fail)
+    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--asr', 'transcribe-cpp'])
     assert watch.main() == 1
-    assert 'local model failed' in capsys.readouterr().out
-
-
-def test_contradictory_flags_rejected(monkeypatch):
-    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--no-whisper', '--whisper', 'whisperx'])
-    with pytest.raises(SystemExit):
-        watch.main()
+    assert 'Transcription failed: local model failed' in capsys.readouterr().out
 
 
 def test_user_out_dir_and_local_source_preserved(static_clip, tmp_path):
@@ -181,13 +177,6 @@ def test_user_out_dir_and_local_source_preserved(static_clip, tmp_path):
     _run(source, '--out-dir', str(tmp_path))
     assert source.read_bytes() == static_clip.read_bytes() and sentinel.read_text() == 'keep'
     assert list(tmp_path.glob('watch-*/frames/frame_*.jpg'))
-
-
-def test_cli_no_whisper_overrides_invalid_saved_backend(monkeypatch):
-    _mock_audio(monkeypatch)
-    monkeypatch.setenv('WATCH_WHISPER_BACKEND', 'invalid-old-preference')
-    monkeypatch.setattr(sys, 'argv', ['watch', 'video.mp4', '--detail', 'transcript', '--no-whisper'])
-    assert watch.main() == 0
 
 
 def _gemini_answer(monkeypatch, seen):
@@ -202,7 +191,7 @@ def test_youtube_with_key_uses_gemini_and_touches_nothing_local(monkeypatch, cap
     seen = {}
     _gemini_answer(monkeypatch, seen)
     monkeypatch.setenv('GEMINI_API_KEY', 'unit-key')
-    for name in ('fetch_captions', 'download', 'get_metadata', 'transcribe_video'):
+    for name in ('fetch_captions', 'download', 'get_metadata', 'transcribe_media'):
         monkeypatch.setattr(watch, name, lambda *a, _n=name, **kw: pytest.fail(f'{_n} must not run on a Gemini YouTube run'))
     monkeypatch.setattr(sys, 'argv', ['watch', 'https://youtu.be/abc', '--question', 'When does it change?', '--detail', 'efficient'])
     assert watch.main() == 0
@@ -252,13 +241,13 @@ def test_engine_local_never_contacts_gemini(monkeypatch, static_clip, capsys):
     monkeypatch.setenv('GEMINI_API_KEY', 'unit-key')
     for name in ('ask', 'upload_file'):
         monkeypatch.setattr(gemini, name, lambda *a, **kw: pytest.fail('local engine must not contact Google'))
-    monkeypatch.setattr(sys, 'argv', ['watch', str(static_clip), '--engine', 'local', '--no-whisper'])
+    monkeypatch.setattr(sys, 'argv', ['watch', str(static_clip), '--engine', 'local', '--asr', 'none'])
     assert watch.main() == 0
     assert '## Frames' in capsys.readouterr().out
 
 
 def test_no_key_keeps_the_local_pipeline(monkeypatch, static_clip, capsys):
-    monkeypatch.setattr(sys, 'argv', ['watch', str(static_clip), '--no-whisper'])
+    monkeypatch.setattr(sys, 'argv', ['watch', str(static_clip), '--asr', 'none'])
     assert watch.main() == 0
     assert '## Frames' in capsys.readouterr().out
 
