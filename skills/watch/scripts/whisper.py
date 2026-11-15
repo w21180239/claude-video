@@ -362,6 +362,11 @@ def transcribe_video(
         from local_whisperx import transcribe_audio
         segments = transcribe_audio(extract_audio(video_path, audio_out))
         return segments, "whisperx"
+    if backend == "transcribe-cpp":
+        if api_key is not None:
+            raise SystemExit("transcribe.cpp does not accept an API key.")
+        from local_transcribe_cpp import transcribe_media
+        return transcribe_media(Path(video_path), audio_out.parent), "transcribe-cpp"
     if backend not in (None, "groq", "openai"):
         raise SystemExit("Unknown transcription backend.")
     if backend is None or api_key is None:
@@ -416,7 +421,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribe local media with the selected Whisper backend.")
     parser.add_argument("video")
     parser.add_argument("audio_out", nargs="?", default="audio.mp3", type=Path)
-    parser.add_argument("--backend", choices=["groq", "openai", "whisperx"])
+    parser.add_argument("--backend", choices=["groq", "openai", "whisperx", "transcribe-cpp"])
     args = parser.parse_args()
     try:
         segments, backend = transcribe_video(args.video, Path(args.audio_out), backend=args.backend)

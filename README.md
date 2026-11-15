@@ -203,14 +203,39 @@ The first-run wizard asks for your detail preference and fallback backend. Start
 
 | Backend | Requirements and behavior |
 |---|---|
-| `whisperx` | Recommended for transcription on a verified local machine. No API key; the skill manages a separate Python 3.12 environment and downloads its models. |
+| `transcribe-cpp` | Recommended local transcription. Qwen3-ASR-0.6B via [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp): an 18 MB runtime plus an 850 MB model, no Python packages or PyTorch, GPU via Vulkan/Metal when present. |
+| `whisperx` | Local Whisper transcription. No API key; the skill manages a separate Python 3.12 environment and downloads its models. |
 | `groq` | Cloud `whisper-large-v3`; needs `GROQ_API_KEY` from [Groq](https://console.groq.com/keys). |
 | `openai` | Cloud `whisper-1`; needs `OPENAI_API_KEY` from [OpenAI](https://platform.openai.com/api-keys). |
 | `none` | Captions only. Local files and captionless URLs can still provide visual evidence. |
 
-Existing 0.2.0 users retain `auto`: Groq key first, then OpenAI. No automatic migration to local inference. Explicit `--whisper groq|openai|whisperx` overrides this run's fallback, while `--no-whisper` disables all fallbacks and still permits native captions. Those two flags conflict.
+Existing 0.2.0 users retain `auto`: Groq key first, then OpenAI. No automatic migration to local inference. Explicit `--whisper groq|openai|whisperx|transcribe-cpp` overrides this run's fallback, while `--no-whisper` disables all fallbacks and still permits native captions. Those two flags conflict.
 
 Settings live in `~/.config/watch/.env`. Enter keys privately there or in the process environment; do not commit them or paste them into public issues. Cloud-key lookup is provider preference first, then environment → user file → cwd `.env` for each provider. Explicit providers never borrow another provider's key. Config files support UTF-8, UTF-8 BOM, and BOM-marked UTF-16; quotes, comments, and literal Windows paths work without shell expansion. Last assignment wins.
+
+### Local transcribe.cpp
+
+Have the agent run `setup.py --install-transcribe-cpp` (or `--backend transcribe-cpp --detail balanced`). It downloads the pinned transcribe.cpp 0.4.2 Python binding and prebuilt native library into `~/.cache/watch/transcribe-cpp`, reuses `Qwen3-ASR-0.6B-Q8_0.gguf` from the Hugging Face cache when present (otherwise downloads it), fetches the 1.2 MB Silero VAD model, verifies SHA-256 for every download, and warms up on two seconds of silence. The binding is standard-library-only (ctypes); inference runs in a child process.
+
+Silero VAD splits the audio into speech chunks (pauses under 0.5 s merge, speech over 20 s is force-split) and Qwen3-ASR transcribes each chunk. Qwen3-ASR has no timestamp output, so each segment's timing is its chunk span: accurate at the seconds level, coarser than caption cues. Language is auto-detected and reported.
+
+Reference measurements on Windows 11 (RTX 5060 Laptop via Vulkan), whole `watch.py` run including decode:
+
+| Clip | Duration | Wall time | Error vs. human captions |
+|---|---|---|---|
+| English TED-Ed lesson | 230 s | 15.6 s | 4.6% WER |
+| Mandarin talk (first 5 min) | 300 s | 16.5 s | 7.2% CER |
+
+```dotenv
+WATCH_WHISPER_BACKEND=transcribe-cpp
+# Absolute GGUF paths; written by the installer.
+WATCH_TRANSCRIBE_CPP_MODEL=
+WATCH_TRANSCRIBE_CPP_VAD=
+# WATCH_TRANSCRIBE_CPP_LANGUAGE=zh
+# WATCH_TRANSCRIBE_CPP_TIMEOUT=1800
+```
+
+Prebuilt libraries exist for Windows x86_64, Linux x86_64/aarch64 and macOS; only Windows x86_64 is verified.
 
 ### Managed WhisperX
 

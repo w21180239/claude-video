@@ -125,7 +125,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--whisper",
-        choices=["groq", "openai", "whisperx"],
+        choices=["groq", "openai", "whisperx", "transcribe-cpp"],
         default=None,
         help="Select the fallback backend for this run; native captions still come first.",
     )
@@ -265,7 +265,8 @@ def main() -> int:
 
     transcript_state = "missing"
     if not track_available and backend_choice != "none" and video_path and meta.get("has_audio"):
-        backend, api_key = ("whisperx", None) if backend_choice == "whisperx" else load_api_key(None if backend_choice == "auto" else backend_choice)
+        local = backend_choice in ("whisperx", "transcribe-cpp")
+        backend, api_key = (backend_choice, None) if local else load_api_key(None if backend_choice == "auto" else backend_choice)
         if backend:
             try:
                 all_segments, used_backend = transcribe_video(video_path, work / "audio.mp3", backend=backend, api_key=api_key)
@@ -275,6 +276,9 @@ def main() -> int:
                 if used_backend == "whisperx":
                     language = config["whisperx_language"] or "auto (unverified)"
                     transcript_source = f"whisper (whisperx {config['whisperx_model']}, language {language})"
+                elif used_backend == "transcribe-cpp":
+                    transcript_source = (f"local ASR (transcribe.cpp {getattr(all_segments, 'model', '?')}, "
+                                         f"language {getattr(all_segments, 'language', 'unknown')}; timestamps from VAD chunks)")
                 else:
                     transcript_source = f"whisper ({used_backend})"
             except SystemExit as exc:

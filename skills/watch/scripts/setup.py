@@ -20,7 +20,7 @@ REQUIRED_BINARIES = ['ffmpeg', 'ffprobe', 'yt-dlp']
 WHISPERX_VERSION = '3.8.6'
 _PERM_WARNED: set[str] = set()
 ENV_TEMPLATE = '''# /watch configuration. No shell interpolation; last assignment wins.
-# Native captions always come first. Optional fallback: auto|whisperx|groq|openai|none.
+# Native captions always come first. Optional fallback: auto|whisperx|transcribe-cpp|groq|openai|none.
 # auto preserves the Groq-then-OpenAI preference for existing installations.
 # The first-run skill wizard sets WATCH_DETAIL and WATCH_WHISPER_BACKEND.
 # WATCH_ENGINE=auto|gemini|local. auto uses Gemini when GEMINI_API_KEY is set.
@@ -141,6 +141,13 @@ def _whisperx_status(cfg, detailed=False):
     return ready
 
 
+def _transcribe_cpp_status(cfg):
+    # File checks only: --check must never load native code.
+    from local_transcribe_cpp import MODEL, VAD, find_model, runtime_ready
+    return bool(runtime_ready() and find_model(MODEL, cfg['transcribe_cpp_model'])
+                and find_model(VAD, cfg['transcribe_cpp_vad']))
+
+
 def _status(detailed=False):
     missing = _check_binaries()
     _check_file_permissions(CONFIG_FILE)
@@ -155,7 +162,11 @@ def _status(detailed=False):
     chosen = cfg['whisper_backend']
     backend = detected if chosen == 'auto' else chosen
     local_ready = _whisperx_status(cfg, detailed)
-    backend_ready = local_ready if chosen == 'whisperx' else (bool(load_api_key(backend)[1]) if backend in ('groq', 'openai') else chosen == 'none')
+    tcpp_ready = _transcribe_cpp_status(cfg)
+    if chosen in ('whisperx', 'transcribe-cpp'):
+        backend_ready = local_ready if chosen == 'whisperx' else tcpp_ready
+    else:
+        backend_ready = bool(load_api_key(backend)[1]) if backend in ('groq', 'openai') else chosen == 'none'
     blocked = bool(missing) and binaries_required
     result = {'status': 'needs_install' if blocked else 'ready', 'can_proceed': not blocked,
               'engine': engine, 'configured_engine': cfg['engine'], 'gemini_key_present': gemini_key,
@@ -164,7 +175,8 @@ def _status(detailed=False):
               'missing_binaries': missing, 'whisper_backend': backend, 'configured_backend': chosen,
               'has_api_key': has_key, 'backend_ready': backend_ready,
               'whisperx_ready': local_ready, 'whisperx_bin': cfg['whisperx_bin'],
-              'whisperx_model': cfg['whisperx_model'], 'config_file': str(CONFIG_FILE),
+              'whisperx_model': cfg['whisperx_model'], 'transcribe_cpp_ready': tcpp_ready,
+              'config_file': str(CONFIG_FILE),
               'watch_detail': cfg['detail'], 'platform': platform.system()}
     if detailed:
         tools = {}
@@ -226,6 +238,8 @@ def cmd_install(backend=None, detail=None, engine=None):
         write_settings({'WATCH_DETAIL': detail}, CONFIG_FILE)
     if backend == 'whisperx':
         return install_whisperx()
+    if backend == 'transcribe-cpp':
+        return install_transcribe_cpp()
     if backend:
         write_settings({'WATCH_WHISPER_BACKEND': backend}, CONFIG_FILE)
         if backend in ('groq', 'openai') and not load_api_key(backend)[1]:
@@ -312,13 +326,39 @@ def install_whisperx():
     return 0
 
 
+def install_transcribe_cpp():
+    import local_transcribe_cpp as tcpp
+    print(f'[setup] Local transcribe.cpp {tcpp.VERSION}: downloads an 18 MB runtime, plus the 850 MB Qwen3-ASR-0.6B '
+          'model unless the Hugging Face cache already has it. No Python packages or PyTorch.', file=sys.stderr, flush=True)
+    if not _which('ffmpeg'):
+        raise SystemExit('Install FFmpeg first, then rerun setup.py --install-transcribe-cpp.')
+    cfg = tcpp.settings()
+    _scaffold_env()
+    if not tcpp.runtime_ready():
+        tcpp.install_runtime()
+    model = tcpp.ensure_model(tcpp.MODEL, cfg['transcribe_cpp_model'])
+    vad = tcpp.ensure_model(tcpp.VAD, cfg['transcribe_cpp_vad'])
+    cfg.update(transcribe_cpp_model=str(model), transcribe_cpp_vad=str(vad))
+    with tempfile.TemporaryDirectory(prefix='watch-warmup-') as temporary:
+        audio = Path(temporary) / 'silence.wav'
+        _install_step(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+                       'anullsrc=r=16000:cl=mono', '-t', '2', str(audio)], 'Create warm-up audio')
+        tcpp.transcribe_media(audio, Path(temporary), cfg, require_ready=False)
+    tcpp.mark_ready()
+    write_settings({'WATCH_WHISPER_BACKEND': 'transcribe-cpp', 'WATCH_TRANSCRIBE_CPP_MODEL': str(model),
+                    'WATCH_TRANSCRIBE_CPP_VAD': str(vad), 'SETUP_COMPLETE': 'true'}, CONFIG_FILE)
+    print(f'[setup] transcribe.cpp is ready (model {model}).', file=sys.stderr)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--check', action='store_true')
     mode.add_argument('--json', action='store_true')
     mode.add_argument('--install-whisperx', action='store_true')
-    parser.add_argument('--backend', choices=['auto', 'whisperx', 'groq', 'openai', 'none'])
+    mode.add_argument('--install-transcribe-cpp', action='store_true')
+    parser.add_argument('--backend', choices=['auto', 'whisperx', 'transcribe-cpp', 'groq', 'openai', 'none'])
     parser.add_argument('--detail', choices=sorted(DETAILS))
     parser.add_argument('--engine', choices=sorted(ENGINES))
     args = parser.parse_args()
@@ -327,7 +367,8 @@ def main():
             return cmd_check()
         if args.json:
             return cmd_json()
-        return cmd_install('whisperx' if args.install_whisperx else args.backend, args.detail, args.engine)
+        backend = 'whisperx' if args.install_whisperx else 'transcribe-cpp' if args.install_transcribe_cpp else args.backend
+        return cmd_install(backend, args.detail, args.engine)
     except (ConfigError, OSError, ValueError) as exc:
         print(f'[setup] {exc}', file=sys.stderr)
         return 2

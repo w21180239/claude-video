@@ -44,6 +44,13 @@ def isolated_user(monkeypatch, tmp_path):
     def no_gemini(*args, **kwargs):
         raise AssertionError("Tests must mock Gemini calls")
     monkeypatch.setattr(gemini, "urlopen", no_gemini)
+    for key in ("HF_HOME", "HF_HUB_CACHE"):
+        monkeypatch.delenv(key, raising=False)
+    import local_transcribe_cpp
+    monkeypatch.setattr(local_transcribe_cpp, "HOME", home / ".cache" / "watch" / "transcribe-cpp")
+    def no_download(*args, **kwargs):
+        raise AssertionError("Tests must mock transcribe.cpp downloads")
+    monkeypatch.setattr(local_transcribe_cpp.urllib.request, "urlopen", no_download)
 
 # 14 visually distinct fills → 14 abrupt cuts → x264 emits a keyframe per cut.
 COLORS = [
