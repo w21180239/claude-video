@@ -1,6 +1,6 @@
 """Local transcribe.cpp backend: Silero VAD chunks, then a GGUF ASR model per chunk.
 
-Default model is Qwen3-ASR-0.6B (Q8_0). It emits no timestamps, so each VAD chunk's
+Default model is SenseVoiceSmall (Q8_0; zh, en, yue, ja, ko). It emits no timestamps, so each VAD chunk's
 span becomes the segment timing. Inference runs in a child process so a native crash
 cannot take down watch. The Python binding is stdlib-only (ctypes).
 """
@@ -35,8 +35,8 @@ NATIVE = {
 }
 LIBRARY_NAMES = ('transcribe.dll', 'libtranscribe.so', 'libtranscribe.dylib')
 # (Hugging Face repo, file, sha256)
-MODEL = ('handy-computer/Qwen3-ASR-0.6B-gguf', 'Qwen3-ASR-0.6B-Q8_0.gguf',
-         'f081b2d5e23bd669d92cc331d722a8a0681943b8e6f34b48996fd5c319b5acd8')
+MODEL = ('handy-computer/SenseVoiceSmall-gguf', 'SenseVoiceSmall-Q8_0.gguf',
+         '6c759ee4c9748c9b3f7a5a60ca74f0f7e685fb9d45d1378fce7cfd62f59adf29')
 VAD = ('handy-computer/silero-vad-v6.2-gguf', 'silero-vad-v6.2-F32.gguf',
        '0d871a800c420fdd5d1b17a3aea4296d1c39608f0ff4a9295eb76457eb1c88e6')
 HOME = Path.home() / '.cache' / 'watch' / 'transcribe-cpp'

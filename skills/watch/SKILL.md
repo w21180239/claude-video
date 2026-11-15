@@ -61,7 +61,7 @@ If the detail question is skipped, retain `balanced`.
 
 Then ask: **For videos without captions, how should watch transcribe?** Present:
 
-1. `transcribe-cpp` (recommended): local transcription with Qwen3-ASR-0.6B through transcribe.cpp, no API key; audio stays on the machine. One-time download of an 18 MB runtime plus the 850 MB model (skipped when the Hugging Face cache already has it). No Python packages or PyTorch; uses Vulkan/Metal GPUs when present. 30 languages including English and Chinese. Windows x86_64 is verified; Linux and macOS builds are untested.
+1. `transcribe-cpp` (recommended): local transcription with SenseVoiceSmall through transcribe.cpp, no API key; audio stays on the machine. One-time download of an 18 MB runtime plus the 250 MB model (skipped when the Hugging Face cache already has it). No Python packages or PyTorch; uses Vulkan/Metal GPUs when present. Chinese, English, Cantonese, Japanese and Korean, auto-detected. Windows x86_64 is verified; Linux and macOS builds are untested.
 2. `none`: captions only; no speech fallback.
 
 Use an existing explicit choice without asking again. Do not treat silence as permission to install the model; `none` remains available.
@@ -135,7 +135,7 @@ For a presenter saying “look here,” “notice this,” or similar:
 
 Full-track caption availability is checked before focus filtering. A silent focus interval does not trigger transcription. Reports distinguish no speech, disabled fallback, and failed modalities.
 
-`WATCH_ASR_BACKEND=transcribe-cpp|none` (default `none`) chooses the saved fallback. transcribe.cpp splits audio with Silero VAD (pauses under 0.5 s merge, speech over 20 s is force-split) and transcribes each chunk; Qwen3-ASR emits no timestamps, so a segment's timing is its VAD chunk span (seconds-level, coarser than captions). The spoken language is auto-detected per chunk and reported; `WATCH_TRANSCRIBE_CPP_LANGUAGE=zh` (for example) forces it. Never infer it from `--sub-lang`, which may request a translation. `WATCH_TRANSCRIBE_CPP_MODEL` and `WATCH_TRANSCRIBE_CPP_VAD` take absolute GGUF paths; unset, the installer's paths or the Hugging Face cache are used. `WATCH_TRANSCRIBE_CPP_TIMEOUT` optionally sets positive seconds; by default there is no deadline.
+`WATCH_ASR_BACKEND=transcribe-cpp|none` (default `none`) chooses the saved fallback. transcribe.cpp splits audio with Silero VAD (pauses under 0.5 s merge, speech over 20 s is force-split) and transcribes each chunk; SenseVoiceSmall emits no timestamps, so a segment's timing is its VAD chunk span (seconds-level, coarser than captions). The spoken language is auto-detected per chunk and reported; `WATCH_TRANSCRIBE_CPP_LANGUAGE=zh` (for example) forces it. Never infer it from `--sub-lang`, which may request a translation. `WATCH_TRANSCRIBE_CPP_MODEL` and `WATCH_TRANSCRIBE_CPP_VAD` take absolute GGUF paths; unset, the installer's paths or the Hugging Face cache are used. `WATCH_TRANSCRIBE_CPP_TIMEOUT` optionally sets positive seconds; by default there is no deadline.
 
 For download failures, use the bounded original error and its diagnostic hint. A 403 has no generic fix, but first update yt-dlp with its owning package manager (e.g. `brew upgrade yt-dlp`, `pipx upgrade yt-dlp`) and retry once. Do not hardcode alternate clients, cycle cookies, or disable TLS verification. Preserve available captions when media/probing fails. For hosted environments, local uploads solve downloading only; cold transcribe.cpp setup still needs permitted network access.
 

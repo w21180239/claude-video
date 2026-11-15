@@ -203,7 +203,7 @@ def cmd_install(asr=None, detail=None, engine=None):
 
 def install_transcribe_cpp():
     import local_transcribe_cpp as tcpp
-    print(f'[setup] Local transcribe.cpp {tcpp.VERSION}: downloads an 18 MB runtime, plus the 850 MB Qwen3-ASR-0.6B '
+    print(f'[setup] Local transcribe.cpp {tcpp.VERSION}: downloads an 18 MB runtime, plus the 250 MB SenseVoiceSmall '
           'model unless the Hugging Face cache already has it. No Python packages or PyTorch.', file=sys.stderr, flush=True)
     cfg = tcpp.settings()
     _scaffold_env()

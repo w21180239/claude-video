@@ -203,7 +203,7 @@ The first-run wizard asks for your detail preference and speech fallback. Start 
 
 | `WATCH_ASR_BACKEND` | Requirements and behaviour |
 |---|---|
-| `transcribe-cpp` | Recommended local transcription. Qwen3-ASR-0.6B via [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp): an 18 MB runtime plus an 850 MB model, no Python packages or PyTorch, GPU via Vulkan/Metal when present. |
+| `transcribe-cpp` | Recommended local transcription. SenseVoiceSmall via [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp): an 18 MB runtime plus a 250 MB model, no Python packages or PyTorch, GPU via Vulkan/Metal when present. |
 | `none` (default) | Captions only. Local files and captionless URLs can still provide visual evidence. |
 
 `--asr transcribe-cpp|none` overrides the saved choice for one run; native captions are still used either way.
@@ -212,16 +212,16 @@ Settings live in `~/.config/watch/.env`. Enter keys privately there or in the pr
 
 ### Local transcribe.cpp
 
-Have the agent run `setup.py --asr transcribe-cpp --detail balanced`; rerunning it repairs a broken install. It downloads the pinned transcribe.cpp 0.4.2 Python binding and prebuilt native library into `~/.cache/watch/transcribe-cpp`, reuses `Qwen3-ASR-0.6B-Q8_0.gguf` from the Hugging Face cache when present (otherwise downloads it), fetches the 1.2 MB Silero VAD model, verifies SHA-256 for every download, and warms up on two seconds of silence. The binding is standard-library-only (ctypes); inference runs in a child process.
+Have the agent run `setup.py --asr transcribe-cpp --detail balanced`; rerunning it repairs a broken install. It downloads the pinned transcribe.cpp 0.4.2 Python binding and prebuilt native library into `~/.cache/watch/transcribe-cpp`, reuses `SenseVoiceSmall-Q8_0.gguf` from the Hugging Face cache when present (otherwise downloads it), fetches the 1.2 MB Silero VAD model, verifies SHA-256 for every download, and warms up on two seconds of silence. The binding is standard-library-only (ctypes); inference runs in a child process.
 
-Silero VAD splits the audio into speech chunks (pauses under 0.5 s merge, speech over 20 s is force-split) and Qwen3-ASR transcribes each chunk. Qwen3-ASR has no timestamp output, so each segment's timing is its chunk span: accurate at the seconds level, coarser than caption cues. Language is auto-detected and reported.
+Silero VAD splits the audio into speech chunks (pauses under 0.5 s merge, speech over 20 s is force-split) and SenseVoiceSmall transcribes each chunk. It has no timestamp output, so each segment's timing is its chunk span: accurate at the seconds level, coarser than caption cues. Language is auto-detected and reported.
 
 Reference measurements on Windows 11 (RTX 5060 Laptop via Vulkan), whole `watch.py` run including decode:
 
 | Clip | Duration | Wall time | Error vs. human captions |
 |---|---|---|---|
-| English TED-Ed lesson | 230 s | 15.6 s | 4.6% WER |
-| Mandarin talk (first 5 min) | 300 s | 16.5 s | 7.2% CER |
+| English TED-Ed lesson | 230 s | 3.3 s | 4.8% WER |
+| Mandarin talk (first 5 min) | 300 s | 4.1 s | 7.5% CER |
 
 ```dotenv
 WATCH_ASR_BACKEND=transcribe-cpp
