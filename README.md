@@ -129,7 +129,7 @@ You can target an agent explicitly, for example `-a codex`, but Codex users can 
 
 ## Try your first video
 
-**Fastest path — let Gemini watch it.** Get a free [Google AI Studio key](https://aistudio.google.com/apikey). When the setup wizard asks for it, paste it in the chat, or have the agent open `~/.config/watch/.env` in your text editor so you can paste it after `GEMINI_API_KEY=` and save it yourself. Watch then hands the whole video — picture and sound — to Google's agentic video model and relays its timestamped answer. YouTube links need nothing else installed. Local files are uploaded to Google and deleted after the answer.
+**Fastest path — let Gemini watch it.** Get a free [Google AI Studio key](https://aistudio.google.com/apikey). When the setup wizard asks for it, have the agent open `~/.config/watch/.env` in your text editor and paste it after `GEMINI_API_KEY=` yourself; keep keys out of the chat. Watch then hands the whole video — picture and sound — to Google's agentic video model and relays its timestamped answer. YouTube links need nothing else installed. Local files are uploaded to Google and deleted after the answer.
 
 **No key, or a private video?** Choose `local`. Watch extracts frames and a transcript on your machine (`ffmpeg` + `yt-dlp`), exactly as before. Force it any time with `--engine local`. The walkthrough below uses this no-key path.
 

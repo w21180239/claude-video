@@ -1,6 +1,6 @@
 ---
 name: watch
-description: Watch a video (URL or local path). Downloads with yt-dlp, extracts auto-scaled frames with ffmpeg, pulls the transcript from captions (or local WhisperX / cloud Whisper fallback), and hands the result to the agent so it can answer questions about what's in the video. With a Gemini API key, Google's agentic video model watches the full video instead.
+description: Watch a video (URL or local path). Downloads with yt-dlp, extracts auto-scaled frames with ffmpeg, pulls the transcript from captions (or a local transcribe.cpp / WhisperX or cloud Whisper fallback), and hands the result to the agent so it can answer questions about what's in the video. With a Gemini API key, Google's agentic video model watches the full video instead.
 license: MIT
 allowed-tools: Bash, Read, AskUserQuestion
 metadata:
@@ -46,10 +46,7 @@ If `gemini`, run:
 python3 "${SKILL_DIR}/scripts/setup.py" --engine gemini
 ```
 
-Exit 3 means the key is missing; the command has created `~/.config/watch/.env` for it. Point the user to https://aistudio.google.com/apikey for a free key and let them choose how to add it:
-
-- **Paste it in chat.** Write it on the `GEMINI_API_KEY=` line of the config file (add the line if it is missing) with a file-editing tool, preserving the other lines.
-- **Add it themselves.** Offer to open the config file in their text editor (`open -t` on macOS, `notepad` on Windows, `xdg-open` on Linux) so they can paste the key after `GEMINI_API_KEY=` and save. This only works when you run on the user's own computer; otherwise give them the file path.
+Exit 3 means the key is missing; the command has created `~/.config/watch/.env` for it. Point the user to https://aistudio.google.com/apikey for a free key. Keys never go through the chat, where transcripts keep them: tell the user not to paste it, and offer to open the config file in their text editor (`open -t` on macOS, `notepad` on Windows, `xdg-open` on Linux) so they can paste the key after `GEMINI_API_KEY=` and save. When you are not on the user's own computer, give them the file path instead.
 
 Never print the key or put it in a shell command. Once it is saved, rerun `setup.py --engine gemini`. On exit 0 setup is complete — **skip the detail and transcription questions**; they only apply to the local engine. If `local`: run `setup.py --engine local` (this also installs missing base binaries and scaffolds the private config) and continue with the two questions below. An existing explicit `WATCH_ENGINE` is not asked again.
 
@@ -83,7 +80,7 @@ For transcribe.cpp, the installer downloads the pinned runtime and any missing m
 
 For WhisperX, relay progress while the installer provisions uv, Python 3.12, pinned dependencies, and both model caches. `setup.py --install-whisperx` reruns this managed installer if needed. It writes the backend, executable, model, and completion marker only after warm-up succeeds. A failed local installation never selects a cloud backend automatically.
 
-For cloud, get the matching key the same way as the Gemini key (pasted in chat, or the user adds it after offering to open the config file), then rerun `setup.py --backend groq` or `--backend openai`. Preserve existing keys and comments; do not print keys or include them in a shell command. The script marks setup complete after that backend is ready. `--backend none` needs no key and completes immediately.
+For cloud, get the matching key the same way as the Gemini key (the user adds it to the config file in their editor, never in chat), then rerun `setup.py --backend groq` or `--backend openai`. Preserve existing keys and comments; do not print keys or include them in a shell command. The script marks setup complete after that backend is ready. `--backend none` needs no key and completes immediately.
 
 `setup.py --check` is a fast, silent base preflight: exit 0 when binaries exist (or the Gemini engine is active), 2 for missing dependencies/config errors. It never starts Torch or queries network services. `--json` adds `engine` (resolved: `gemini` or `local`), `configured_engine`, `gemini_key_present` (boolean only), `gemini_model`, `binaries_required`, executable paths/versions, offline yt-dlp capability diagnostics, and `whisperx_ready`, `whisperx_bin`, `whisperx_model`, `transcribe_cpp_ready` (file checks only; native code is never loaded), and `backend_ready`. Local readiness in detailed mode checks the sentinel and executable help. Optional fallback failure does not block base watch.
 
