@@ -183,7 +183,7 @@ def _gemini_answer(monkeypatch, seen):
     import gemini
     def fake_ask(video, question, **kw):
         seen.update(video=video, question=question, **kw)
-        return {'text': 'At 00:10 it turns blue.', 'model': kw['model'], 'processing': 'agentic', 'total_tokens': 4348}
+        return {'text': 'At 00:10 it turns blue.', 'model': kw['model'], 'processing': 'static', 'total_tokens': 4348}
     monkeypatch.setattr(gemini, 'ask', fake_ask)
 
 
@@ -198,7 +198,7 @@ def test_youtube_with_key_uses_gemini_and_touches_nothing_local(monkeypatch, cap
     out = capsys.readouterr().out
     assert seen['video'] == {'uri': 'https://youtu.be/abc'} and seen['question'] == 'When does it change?'
     assert seen['clip'] is None and seen['model'] == 'gemini-3.7-flash'
-    assert '**Engine:** gemini-3.7-flash (agentic)' in out
+    assert '**Engine:** gemini-3.7-flash (static)' in out
     assert '**Ignored local options:** --detail' in out
     assert '## Answer (from Gemini)' in out and 'At 00:10 it turns blue.' in out
     assert 'unit-key' not in out

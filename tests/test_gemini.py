@@ -69,7 +69,7 @@ def test_prompt_always_demands_timestamps():
     assert 'summary' in default.lower() and 'MM:SS' in default
 
 
-def test_agentic_youtube_payload_and_header_only_key(calls):
+def test_static_youtube_payload_and_header_only_key(calls):
     calls.replies = [FakeResponse(answer('At 00:10 the screen turns blue.'))]
     result = gemini.ask({'uri': 'https://youtu.be/abc'}, 'When does it change?', model='gemini-3.7-flash', key=KEY)
     request = calls[0]
@@ -78,10 +78,10 @@ def test_agentic_youtube_payload_and_header_only_key(calls):
     assert request.get_header('X-goog-api-key') == KEY
     payload = json.loads(request.data)
     assert payload['model'] == 'gemini-3.7-flash'
-    assert payload['input'][0] == {'type': 'video', 'uri': 'https://youtu.be/abc', 'processing': 'agentic'}
+    assert payload['input'][0] == {'type': 'video', 'uri': 'https://youtu.be/abc', 'processing': {'type': 'static'}}
     assert payload['input'][1]['type'] == 'text' and 'When does it change?' in payload['input'][1]['text']
     assert result == {'text': 'At 00:10 the screen turns blue.', 'model': 'gemini-3.7-flash',
-                      'processing': 'agentic', 'total_tokens': 4348}
+                      'processing': 'static', 'total_tokens': 4348}
 
 
 def test_clip_uses_static_processing_with_duration_strings(calls):

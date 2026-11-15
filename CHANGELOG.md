@@ -9,6 +9,7 @@ All notable changes to `/watch` are documented here.
 - `setup.py --install-transcribe-cpp`; `setup.py --asr transcribe-cpp` installs and repairs it.
 
 ### Changed
+- Gemini engine uses static video processing for whole videos too; agentic processing timed out (HTTP 504 after 600 s) on every attempt.
 - `--whisper` / `--no-whisper` become `--asr transcribe-cpp|none`; `setup.py --backend` becomes `--asr`.
 - `WATCH_WHISPER_BACKEND` becomes `WATCH_ASR_BACKEND` (`transcribe-cpp` or `none`, default `none`).
 - `setup.py --json` reports `asr_backend` and `asr_ready` in place of the Whisper and WhisperX fields.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gemini engine: Google watches the video (agentic processing) and answers.
+"""Gemini engine: Google watches the video (static processing) and answers.
 
 Standard library only. The key travels in the x-goog-api-key header and is
 scrubbed from every diagnostic.
@@ -79,10 +79,11 @@ def _call(method: str, url: str, key: str, *, data=None, headers=None, timeout: 
 
 
 def _processing(clip):
+    # Agentic processing timed out (HTTP 504 after 600 s) even on a 19 s clip; static answers.
+    config = {'type': 'static'}
     if not clip or (clip[0] is None and clip[1] is None):
-        return 'agentic', 'agentic'
+        return config, 'static'
     start, end = clip
-    config = {'type': 'static'}  # Offsets are only accepted in static mode, as duration strings.
     if start is not None:
         config['start_offset'] = f'{int(math.floor(start))}s'
     if end is not None:
